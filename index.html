@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>小费计算器</title>
+  <script>
+    // 尽早应用已保存或系统主题，避免首屏闪一下
+    (function () {
+      var t = localStorage.getItem("tip-calc-theme");
+      if (t !== "dark" && t !== "light") {
+        t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+  <style>
+    :root {
+      --bg: #e8eef6;
+      --bg-glow: #c5d4ea;
+      --card: #ffffff;
+      --accent: #16a34a;
+      --accent-ink: #052e16;
+      --text: #0f172a;
+      --muted: #64748b;
+      --input: #f1f5f9;
+      --border: #cbd5e1;
+      --btn: #f8fafc;
+      --shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
+    }
+    html[data-theme="dark"] {
+      --bg: #0f172a;
+      --bg-glow: #1e3a5f;
+      --card: #1e293b;
+      --accent: #22c55e;
+      --accent-ink: #052e16;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --input: #0b1220;
+      --border: #334155;
+      --btn: #0b1220;
+      --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(circle at top, var(--bg-glow), var(--bg));
+      color: var(--text);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      transition: background 0.2s, color 0.2s;
+    }
+    .card {
+      width: min(420px, 100%);
+      background: var(--card);
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      transition: background 0.2s, box-shadow 0.2s;
+    }
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    p.sub { margin: 0 0 24px; color: var(--muted); }
+    /* 主题切换按钮：图标 + 文案 */
+    .theme-toggle {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      background: var(--btn);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .theme-toggle:hover { border-color: var(--accent); }
+    label { display: block; margin: 16px 0 8px; color: var(--muted); font-size: 0.9rem; }
+    input[type="number"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--input);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    .tips {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+    .tips button {
+      border: 1px solid var(--border);
+      background: var(--btn);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 0;
+      cursor: pointer;
+    }
+    .tips button.active,
+    .tips button:hover { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    .result {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+      display: grid;
+      gap: 10px;
+    }
+    .row { display: flex; justify-content: space-between; }
+    .row strong { color: var(--accent); font-size: 1.15rem; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="header">
+      <div>
+        <h1>小费计算器</h1>
+        <p class="sub">输入账单金额，选择小费比例即可。</p>
+      </div>
+      <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="true">
+        <span id="themeIcon">☀️</span>
+        <span id="themeLabel">浅色</span>
+      </button>
+    </div>
+
+    <label for="bill">账单金额（元）</label>
+    <input id="bill" type="number" min="0" step="0.01" value="100" />
+
+    <label>小费比例</label>
+    <div class="tips" id="tips">
+      <button type="button" data-tip="10">10%</button>
+      <button type="button" data-tip="15" class="active">15%</button>
+      <button type="button" data-tip="18">18%</button>
+      <button type="button" data-tip="20">20%</button>
+    </div>
+
+    <label for="people">分摊人数</label>
+    <input id="people" type="number" min="1" step="1" value="1" />
+
+    <section class="result">
+      <div class="row"><span>小费</span><strong id="tipAmount">¥0.00</strong></div>
+      <div class="row"><span>总计</span><strong id="total">¥0.00</strong></div>
+      <div class="row"><span>人均</span><strong id="perPerson">¥0.00</strong></div>
+    </section>
+  </main>
+
+  <script>
+    // 当前选中的小费百分比
+    let tipPercent = 15;
+    const billEl = document.getElementById("bill");
+    const peopleEl = document.getElementById("people");
+    const themeToggle = document.getElementById("themeToggle");
+    const THEME_KEY = "tip-calc-theme";
+
+    // 把数字格式化为人民币金额
+    function money(n) {
+      return "¥" + n.toFixed(2);
+    }
+
+    // 根据账单、小费比例、人数计算并刷新界面
+    function calc() {
+      const bill = Math.max(0, Number(billEl.value) || 0);
+      const people = Math.max(1, Math.floor(Number(peopleEl.value) || 1));
+      const tip = bill * tipPercent / 100;
+      const total = bill + tip;
+      document.getElementById("tipAmount").textContent = money(tip);
+      document.getElementById("total").textContent = money(total);
+      document.getElementById("perPerson").textContent = money(total / people);
+    }
+
+    // 应用主题：更新 html 属性、按钮文案，并写入本地存储
+    function applyTheme(theme) {
+      const isDark = theme === "dark";
+      document.documentElement.setAttribute("data-theme", theme);
+      themeToggle.setAttribute("aria-pressed", String(isDark));
+      document.getElementById("themeIcon").textContent = isDark ? "☀️" : "🌙";
+      document.getElementById("themeLabel").textContent = isDark ? "浅色" : "深色";
+      localStorage.setItem(THEME_KEY, theme);
+    }
+
+    // 读取已保存主题，否则跟随系统深浅色偏好
+    function initTheme() {
+      const saved = localStorage.getItem(THEME_KEY);
+      if (saved === "dark" || saved === "light") {
+        applyTheme(saved);
+        return;
+      }
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      applyTheme(prefersDark ? "dark" : "light");
+    }
+
+    // 点击预设比例按钮：高亮当前项并重新计算
+    document.getElementById("tips").addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      tipPercent = Number(btn.dataset.tip);
+      document.querySelectorAll("#tips button").forEach((b) => b.classList.toggle("active", b === btn));
+      calc();
+    });
+
+    // 在深色 / 浅色之间切换
+    themeToggle.addEventListener("click", () => {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      applyTheme(next);
+    });
+
+    billEl.addEventListener("input", calc);
+    peopleEl.addEventListener("input", calc);
+    initTheme();
+    calc();
+  </script>
+</body>
+</html>
